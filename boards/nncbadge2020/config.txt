@@ -1,0 +1,3 @@
+symbols: esp32_common.s esp32_rom.s
+segment: .irom0.text 0x40000000 0x70000 flash_mem_rom0_ext.bin
+segment: .irom1.text 0x3FF90000 0x70000 flash_mem_rom1_ext.bin

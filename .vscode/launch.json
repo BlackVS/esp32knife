@@ -1,0 +1,55 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            //"args": ["flash_id"]
+            //"args": ["--chip=esp32", "load_from_device", "--port=/dev/ttyUSB0", "--baud=2000000", "-e"]
+            //"args": ["--chip=auto", "load_from_device", "--port=/dev/ttyUSB0", "--baud=2000000", "-e"]
+            //"args": ["load_from_device", "--port=/dev/ttyUSB0", , "-e"]
+            //"args": ["load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            //"args": ["load_from_device", "--port=auto", "-e"] #esp8266
+            //"args": ["--chip=esp32", "-m=esp32badge2019", "load_from_file", "firmware_esp32os_full.bin"]
+            //"args": ["elf/firmware.s", "elf/nn-badge191.s", "symbols_common_esp32.s"]
+            //"args": ["memory/esp_rom/esp32/ld", "symbols_from_rom_esp32.s"]
+            //"args": ["--chip=esp32", "load_from_file", "firmware_nnc2019_full.bin"]
+            //"args": ["--chip=esp32", "-m=nncbadge2019", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            //"args": ["--chip=esp32", "-m=nncbadge2019", "load_from_device", "--port=auto", "-e"]
+            //"args": ["--chip=esp32", "-m=nncbadge2019", "load_from_file", "boards/nncbadge2019/firmware_nnc2019_full.bin"]
+            //"args" : ["parsed/firmware_partitions.bin.0.nvs"]
+            //badge2020
+            //"args": ["--chip=esp32", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            //"args": ["--chip=esp32", "-m=nncbadge2020_v2", "load_from_file", "boards/nncbadge2020_v2/firmware_nnc2020_v2_full.bin"]
+            
+            //badge2020 - CTF
+            //"args": ["--chip=esp32", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            //"args": ["--chip=esp32", "-m=nncbadge2020", "load_from_file", "firmware.bin"]
+            //"args": ["--chip=esp32", "-m=nncbadge2020", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+                        
+            //single
+            //"args": ["--chip=esp32", "load_from_file", "boards/nncbadge2020_ctf/firmware_nnc2020_ctf_full.bin"]
+            
+            //rom
+            //"args": ["--chip=esp32", "-m=nncbadge2020_ctf", "load_from_file", "boards/nncbadge2020_ctf/firmware_nnc2020_ctf_full.bin"]
+
+            //bootloader signed 2019
+            //"args": ["--chip=esp32", "load_from_file", "boards/nncbadge2020_ctf/firmware_nnc2020_ctf_full.bin"]
+
+            //bin2elf
+            //"args": ["--chip=esp32", "-m=nncbadge2020_ctf", "load_from_file", "parsed.nnc2020_v3_ctf/firmware_bootloader.bin"]
+
+            //nvs2cvs
+            //"args": ["-t=cvs", "parsed/part.0.nvs"]
+            //"args": ["-t=text", "parsed/part.0.nvs"]
+            "args": ["-t=json", "parsed/part.0.nvs"]
+            //"args": ["-t=cvs", "espressif/nvs_flash/nvs_partition_generator/sample_multipage_blob.bin"]
+        }
+    ]
+}
