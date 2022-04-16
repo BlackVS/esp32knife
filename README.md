@@ -14,7 +14,7 @@ esp32knife.py --chip=esp32 -m=nncbadge2019 load_from_device --port=auto --baud=2
 esp32knife.py --chip=esp32 -m=nncbadge2019 load_from_device --port=auto -e
 ```
 
-Load from full bi9nary file
+Load from full binary file
 ```bash
 esp32knife.py --chip=esp32 -m=esp32badge2019 load_from_file firmware_esp32os_full.bin
 esp32knife.py --chip=esp32 load_from_file firmware_nnc2019_full.bin
