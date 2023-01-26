@@ -3,6 +3,15 @@ Tools for ESP32 firmware dissection
 
 Still alpha.
 
+install dependency by executing
+```bash
+pip install -r requirements.txt
+```
+or 
+```bash
+python3 -m pip install rrequirements.txt
+```
+
 Examples:
 
 Load from device
