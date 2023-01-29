@@ -1,0 +1,7 @@
+pyserial
+bitstring==2.2.0
+ecdsa
+cryptography
+reedsolo
+makeelf
+hexdump
