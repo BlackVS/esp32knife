@@ -9,7 +9,7 @@ pip install -r requirements.txt
 ```
 or 
 ```bash
-python3 -m pip install rrequirements.txt
+python3 -m pip install requirements.txt
 ```
 
 Examples:
