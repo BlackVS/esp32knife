@@ -2,6 +2,7 @@
 Tools for ESP32 firmware dissection
 
 V1: old legacy version, needs old esptool (3.0), supports just few boards
+
 V2: will be bound to newer esptool with more boards support
 
 install dependency by executing
