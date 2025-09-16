@@ -20,7 +20,7 @@ import argparse
 import esptool
 from . import base_fields
 from . import util
-from bitstring import BitString
+from bitstring import BitStream 
 
 
 def add_common_commands(subparsers, efuses):
@@ -262,7 +262,7 @@ def burn_block_data(esp, efuses, args):
 def burn_bit(esp, efuses, args):
     num_block = efuses.get_index_block_by_name(args.block)
     block = efuses.blocks[num_block]
-    data_block = BitString(block.get_block_len() * 8)
+    data_block = BitStream(block.get_block_len() * 8)
     data_block.set(0)
     try:
         data_block.set(True, args.bit_number)
