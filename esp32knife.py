@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
 import sys, os
+import re
 import esptool
 import espefuse
 # from espefuse import efuses_init_commands
 import argparse
 import time
 import shutil
-import hashlib
-import binascii
 import struct
-import re
+
+from espconsts import *
+from esplog import *
 import esp32firmware as esp32
 import esp32partgen as esp32part
 import copy
@@ -28,20 +29,6 @@ from esp32exceptions import *
 from esp32utils import *
 import io
 import json
-
-BASEDIR_DIS = "parsed"
-#BASEFILE = ""
-
-FILE_EFUSES_TXT = "{}/efuses".format(BASEDIR_DIS)
-FILE_FIRMWARE = "{}/firmware.bin".format(BASEDIR_DIS)
-FILE_LOGNAME = "{}/knife.log".format(BASEDIR_DIS)
-FILE_LOG = None
-FILE_BOOTLOADER = "{}/bootloader.bin".format(BASEDIR_DIS)
-FILE_PARTITIONS_CSV = "{}/partitions.csv".format(BASEDIR_DIS)
-FILE_PARTITIONS_BIN = "{}/partitions.bin".format(BASEDIR_DIS)
-FILE_PARTITIONS = "{}/part".format(BASEDIR_DIS)
-
-NVS_BLOB_DATA_DIR = BASEDIR_DIS+"/nvs_blob_data"
 
 FIRMWARE_CHIP = None
 FIRMWARE_ESP  = None
@@ -72,26 +59,229 @@ def esp_flash_size(esp):
     size_id = flash_id >> 16
     return DETECTED_FLASH_SIZES_INT.get(size_id, None)
 
-
 DRAM0_DATA_START = None
 DRAM0_DATA_END   = None
 
+# esptool\docs\en\advanced-topics\firmware-image-format.rst 
+# .. only:: esp8266
+#     +--------+--------------------------------------------------------------------------------------------------+
+#     | Byte   | Description                                                                                      |
+#     +========+==================================================================================================+
+#     | 0      | Magic number (always ``0xE9``)                                                                   |
+#     +--------+--------------------------------------------------------------------------------------------------+
+#     | 1      | Number of segments                                                                               |
+#     +--------+--------------------------------------------------------------------------------------------------+
+#     | 2      | SPI Flash Mode (``0`` = QIO, ``1`` = QOUT, ``2`` = DIO, ``3`` = DOUT)                            |
+#     +--------+--------------------------------------------------------------------------------------------------+
+#     | 3      | High four bits - Flash size (``0`` = 512KB, ``1`` = 256KB, ``2`` = 1MB, ``3`` = 2MB, ``4`` = 4MB,|
+#     |        | ``5`` = 2MB-c1, ``6`` = 4MB-c1, ``8`` = 8MB, ``9`` = 16MB)                                       |
+#     |        |                                                                                                  |
+#     |        | Low four bits - Flash frequency (``0`` = 40MHz, ``1`` = 26MHz, ``2`` = 20MHz, ``0xf`` = 80MHz)   |
+#     +--------+--------------------------------------------------------------------------------------------------+
+#     | 4-7    | Entry point address                                                                              |
+#     +--------+--------------------------------------------------------------------------------------------------+
 
-def printlog(*args, **kwargs):
-    global FILE_LOG
-    print(*args, **kwargs)
-    if FILE_LOG:
-        kwargs['file']=FILE_LOG
-        print(*args, **kwargs)
+# esptool\esptool\targets\esp8266.py 
 
+# ESP8266 related code
+# https://github.com/BlackVS/esp32knife/issues/5
+# Thanks to IODN , https://github.com/iodn
 
-def log(f, txt=""):
-    printlog(txt)
-    f.write( "{}\n".format(txt))
+# ESP8266_IMAGE_MAGIC = 0xE9
+# ESP8266_CHECKSUM_INIT = 0xEF
+# class ESP8266V2FirmwareImageRelaxed:
+#     """ESP8266 V2 firmware image with relaxed validation for non-standard images"""
+    
+#     # ROM_LOADER = esptool.bin_image.ESP8266ROM # Get memory map
+    
+#     def __init__(self, load_file=None):
+#         self.version = 1
+#         self.segments = []
+#         self.entrypoint = 0
+#         self.flash_mode = 0
+#         self.flash_size_freq = 0
+#         self.checksum = None
+        
+#         if load_file is not None:
+#             self.load_relaxed(load_file)
+    
+#     def load_relaxed(self, load_file):
+#         """Load with relaxed validation"""
+#         header = load_file.read(8)
+#         if len(header) < 8:
+#             raise Exception("File too short for header")
+            
+#         (magic, segments, self.flash_mode, self.flash_size_freq, self.entrypoint) = struct.unpack('<BBBBI', header)
+        
+#         if magic != ESP8266_IMAGE_MAGIC:
+#             printlog(f"Warning: Invalid magic number 0x{magic:02x}, expected 0xE9")
+#             # Continue anyway for analysis
+        
+#         self.segments = []
+#         for i in range(segments):
+#             try:
+#                 seg_header = load_file.read(8)
+#                 if len(seg_header) < 8:
+#                     printlog(f"Warning: Truncated segment header {i}")
+#                     break
+                    
+#                 (offset, size) = struct.unpack('<II', seg_header)
+                
+#                 if offset > 0x40200000 or offset < 0x3ffe0000 or size > 65536:
+#                     printlog(f"Warning: Suspicious segment {i} - offset: 0x{offset:08x}, size: 0x{size:x}")
+                
+#                 segment_data = load_file.read(size)
+#                 if len(segment_data) < size:
+#                     printlog(f"Warning: Segment {i} truncated, expected {size} bytes, got {len(segment_data)}")
+                    
+#                 # Create segment with proper attributes
+#                 seg = esptool.ImageSegment(offset, segment_data)
+#                 seg.file_offs = load_file.tell() - len(segment_data)
+#                 seg.include_in_checksum = True
+#                 self.segments.append(seg)
+                
+#             except Exception as e:
+#                 printlog(f"Warning: Failed to load segment {i}: {e}")
+#                 break
+        
+#         # Try to read checksum
+#         try:
+#             checksum_byte = load_file.read(1)
+#             if checksum_byte:
+#                 self.checksum = checksum_byte[0]
+#             else:
+#                 self.checksum = 0
+#         except:
+#             self.checksum = 0
+    
+#     def image_size(self):
+#         """Calculate total image size"""
+#         size = 8  # header
+#         for seg in self.segments:
+#             size += 8 + len(seg.data)  # segment header + data
+#         size += 1  # checksum
+#         # Align to 16 bytes
+#         return (size + 15) & ~15
+    
+#     def calculate_checksum(self):
+#         """Calculate expected checksum"""
+#         checksum = ESP8266_CHECKSUM_INIT
+#         for seg in self.segments:
+#             if hasattr(seg, 'include_in_checksum') and seg.include_in_checksum:
+#                 for b in seg.data:
+#                     checksum ^= b
+#         return checksum
+    
+def esp8266_get_image_size(image):
+    image_size = 0
+    for seg in image.segments:
+        ofs_up = seg.file_offs + len(seg.data)
+        if ofs_up > image_size:
+            image_size = ofs_up
+    image_size += 1  # checksum
+    return (image_size + 15) & ~15 # Align to 16 bytes
+
+def esp8266_analyze_firmware(flash, BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS):
+    """Special handling for ESP8266 firmware"""
+    printlog("\nESP8266 Firmware Analysis")
+    printlog("="*80)
+    
+    # ESP8266 typical layout:
+    # 0x00000: Boot image (if present)
+    # 0x01000: User application 1
+    # 0x81000: User application 2 (for OTA)
+    # Variable: System parameters, SDK data
+    
+    images_found = []
+    
+    # Check for images at common offsets
+    esp8266_offsets = [0x0000, 0x1000, 0x81000, 0x101000]
+    
+    for offset in esp8266_offsets:
+        if offset >= len(flash):
+            continue
+            
+        printlog(f"\nTesting offset 0x{offset:x} for ESP8266 image")
+        fimage = flash[offset:]
+        try:
+            # image = ESP8266V2FirmwareImageRelaxed(fimage)
+            image = esptool.bin_image.LoadFirmwareImage("esp8266", fimage )
+            printlog(f"\nFound ESP8266 image at offset 0x{offset:x}")
+                
+            # image_size = image.image_size()
+            image_size = esp8266_get_image_size(image);
+            image_data = flash[offset:offset+image_size]
+            image_name = f"{BASEDIR_DIS}/image_0x{offset:x}.bin"
+            
+            printlog(f"  Entry point: 0x{image.entrypoint:08x}")
+            printlog(f"  Segments: {len(image.segments)}")
+            printlog(f"  Size    : {image_size} bytes")
+            
+            with open(image_name, "wb") as f:
+                f.write(image_data)
+            
+            # Analyze the image
+            printlog(f"\nImage at 0x{offset:x} info:")
+            printlog("-"*40)
+            fparsed = flash_image_info('esp8266', image_data, image_name)
+            if fparsed:
+                export_bin2elf('ESP8266', image_data, image_name, BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS)
+            
+            images_found.append((offset, image_size, image_name))
+                
+        except Exception as e:
+            printlog(f"-> skip: could not parse image at 0x{offset:x}: {e}")
+    
+    # Look for ESP8266 system data structures
+    printlog("\nSearching for data structures...")
+    
+    # Check for RF calibration data at 0x3FC000
+    if 0x3FC000 < len(flash):
+        if flash[0x3FC000:0x3FC004] == b'\x00\x00\xff\x00':
+            printlog(f"Found RF calibration data at 0x3FC000")
+            rf_cal_file = f"{BASEDIR_DIS}/rf_cal_0x3fc000.bin"
+            with open(rf_cal_file, "wb") as f:
+                f.write(flash[0x3FC000:0x3FC000+0x1000])
+    
+    # Check for system parameters with K500 signature
+    for offset in [0x3FD000, 0x3FE000]:
+        if offset >= len(flash):
+            continue
+        
+        # Look for K500 string which appears to be in your firmware
+        if b'K500' in flash[offset:offset+0x20]:
+            printlog(f"Found system parameters (K500) at 0x{offset:x}")
+            param_file = f"{BASEDIR_DIS}/system_params_0x{offset:x}.bin"
+            with open(param_file, "wb") as f:
+                f.write(flash[offset:offset+0x1000])
+    
+    # Check for RF init data at 0x3FF000
+    if 0x3FF000 < len(flash):
+        if flash[0x3FF000+4:0x3FF000+8] == b'\xaa\x55\xaa\x55':
+            printlog(f"Found RF init data at 0x3FF000")
+            rf_init_file = f"{BASEDIR_DIS}/rf_init_0x3ff000.bin"
+            with open(rf_init_file, "wb") as f:
+                f.write(flash[0x3FF000:0x3FF000+0x1000])
+    
+    # Check for WiFi configuration (usually contains SSID/password)
+    # These are often stored in the last sectors
+    for offset in range(len(flash) - 0x4000, len(flash), 0x1000):
+        if offset < 0:
+            continue
+        sector = flash[offset:offset+0x1000]
+        # Look for common WiFi config patterns
+        if b'ssid' in sector or b'password' in sector or b'SSID' in sector:
+            printlog(f"Found potential WiFi configuration at 0x{offset:x}")
+            wifi_file = f"{BASEDIR_DIS}/wifi_config_0x{offset:x}.bin"
+            with open(wifi_file, "wb") as f:
+                f.write(sector)
+    
+    printlog("\nESP8266 firmware analysis complete!")
+    return images_found
+
 
 def arg_auto_int(x):
     return int(x, 0)
-
 
 def print_mac(label, mac):
     printlog('%s: %s' % (label, ':'.join(map(lambda x: '%02x' % x, mac))))
@@ -167,14 +357,20 @@ def flash_image_info(chip, data, filename):
         log(f_info, "Entry point: {:08x}".format(image.entrypoint))
     else:
         log(f_info, "Entry point not set")
-    image_size = image.data_length + len(image.stored_digest)
+    
+    if chip == 'esp8266':
+        image_size = esp8266_get_image_size(image)
+    else :
+        image_size = image.data_length + len(image.stored_digest)
     log(f_info, "real partition size: {}".format(image_size))
-    log(f_info, "secure_pad: {}".format(image.secure_pad))
     log(f_info, "flash_mode: {}".format(image.flash_mode))
     log(f_info, "flash_size_freq: {}".format(image.flash_size_freq))
-    f_map.write("0x{:x}\n".format(image.entrypoint))
-    f_map.write("{}\n".format(len(image.segments)))
-    f_map.write("{} {} {} \n".format(image.secure_pad,image.flash_mode,image.flash_size_freq))
+    f_map.write("Entry: 0x{:x}\n".format(image.entrypoint))
+    f_map.write("Segments: {}\n".format(len(image.segments)))
+    if chip == 'esp8266':
+        f_map.write(f"pad_to_size:{image.pad_to_size} flash_mode:{image.flash_mode} flash_size:{image.flash_size_freq}\n")
+    else:
+        f_map.write(f"secure_pad:{image.secure_pad} flash_mode:{image.flash_mode} flash_size:{image.flash_size_freq}\n")
 
     log(f_info, '%d segments' % len(image.segments))
     log(f_info)
@@ -201,15 +397,18 @@ def flash_image_info(chip, data, filename):
             
     calc_checksum = image.calculate_checksum()
     log(f_info, 'Checksum: %02x (%s)' % (image.checksum, 'valid' if image.checksum == calc_checksum else 'invalid - calculated %02x' % calc_checksum))
-    try:
-        digest_msg = 'Not appended'
-        if image.append_digest:
-            is_valid = image.stored_digest == image.calc_digest
-            digest_msg = "%s (%s)" % (hexify(image.calc_digest).lower(),
-                                      "valid" if is_valid else "invalid")
-            printlog('Validation Hash: %s' % digest_msg)
-    except AttributeError:
-        pass  # ESP8266 image has no append_digest field
+    if chip == 'esp8266':
+        pass # todo: check elf_sha256 if present
+    else:
+        try:
+            digest_msg = 'Not appended'
+            if image.append_digest:
+                is_valid = image.stored_digest == image.calc_digest
+                digest_msg = "%s (%s)" % (hexify(image.calc_digest).lower(),
+                                        "valid" if is_valid else "invalid")
+                printlog('Validation Hash: %s' % digest_msg)
+        except AttributeError:
+            pass  # ESP8266 image has no append_digest field
 
     f_map.close()
     f_info.close()
@@ -261,27 +460,10 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
     for p in ports:
         printlog("Try serial port %s" % p)
         try:
-            # if chip == 'auto':
-            #         # Get the ESP object from esptool
-            #         esp = esptool.detect_chip(p, initial_baud, 'default_reset', False)
-            #         # Prepare the ESP object; run stub and attach flash
-            #         esp = esptool.run_stub(esp)
-            #         esptool.attach_flash(esp)
-            # else:
-            #     # chip_class = esptool.CHIP_DEFS[chip]
-            #     chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(chip, None)
-            #     efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
-            #     chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
-
-            #     esp = chip_class(p, initial_baud, False)
-            #     esp.connect()
-            # break
             esp =  espefuse.get_esp(chip=chip, port=p, baud=initial_baud, before='default_reset', skip_connect=False)
             esp = esp.run_stub()
             esptool.attach_flash(esp)
             break
-
-
         #except (FatalError, OSError) as err:
             #printlog("%s failed to connect: %s" % (p, err))
         except Exception as inst:
@@ -293,7 +475,8 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
     if esp is None:
         raise FatalError("Could not connect to an Espressif device at %s serial port." % ports)
 
-    FIRMWARE_CHIP = esp.CHIP_NAME
+    # FIRMWARE_CHIP = esp.CHIP_NAME
+    FIRMWARE_CHIP = re.sub(r"[-()]", "", esp.CHIP_NAME.lower()) 
 
     printlog("Chip is %s" % (esp.get_chip_description()))
     printlog("Features: %s" % ", ".join(esp.get_chip_features()))
@@ -315,7 +498,7 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
     printlog('Auto-detected Flash size:', flash_size)
 
     if read_efuses:
-        if esp.CHIP_NAME == 'ESP8266':
+        if FIRMWARE_CHIP == 'esp8266':
             efuses = esp.get_efuses()
             with open(FILE_EFUSES_TXT+".txt","wt") as f:
                 f.write(bin(efuses))
@@ -688,7 +871,7 @@ def export_bin2elf(chip, data, filename, board_ext_symbols, board_ext_segments):
         fd.write(bytes(elf))
 
 def main():
-    global FIRMWARE_CHIP, FIRMWARE_ESP, FILE_LOG
+    global FIRMWARE_CHIP, FIRMWARE_ESP
 
     #### globally accessed bins and pased data
     FIRMWARE_FULL_BIN = None
@@ -713,15 +896,16 @@ def main():
         if not os.path.exists(BASEDIR_DIS):
             printlog("- creating directory: {}".format(BASEDIR_DIS))
             os.makedirs(BASEDIR_DIS)
-            FILE_LOG = open(FILE_LOGNAME, "wt")
+            log_open(FILE_LOGNAME)
+            
 
 
         parser = argparse.ArgumentParser(add_help=True, description='ESP32 analyzer')
 
         parser.add_argument('--chip', '-c',
                             help='Target chip type',
-                            choices=['auto', 'esp8266', 'esp32', 'esp32s2'],
-                            default=os.environ.get('ESPTOOL_CHIP', 'auto'))
+                            choices=['auto', 'esp8266', 'esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c2', 'esp32c6', 'esp32c61', 'esp32c5', 'esp32h2', 'esp32h21', 'esp32p4', 'esp32h4' ], #esptool\esptool\bin_image.py 
+                            default=os.environ.get('ESPTOOL_CHIP', 'auto')) 
         parser.add_argument('--board', '-m',
                             help='Target board',
                             default=None)
@@ -791,7 +975,8 @@ def main():
         if args.operation=='load_from_device':
             FIRMWARE_FULL_BIN = read_firmware_from_device(args.chip, args.port, args.baud, args.read_efuses)  
             esp = FIRMWARE_ESP
-            FIRMWARE_CHIP = esp.CHIP_NAME.lower()
+            # FIRMWARE_CHIP = esp.CHIP_NAME.lower()
+            FIRMWARE_CHIP = re.sub(r"[-()]", "", esp.CHIP_NAME.lower()) 
 
             printlog("Writing full firmware to: {}".format(FILE_FIRMWARE))
             with open(FILE_FIRMWARE,"wb") as f:
@@ -814,22 +999,30 @@ def main():
             printlog("Failed to read firmware!")
             return
 
+        chip_class = None
         chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(FIRMWARE_CHIP, None)
-        if not chip_def:
-            printlog("Unsupported chip: {}".format(FIRMWARE_CHIP))
-            return
-        # efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
-        chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
+        if FIRMWARE_CHIP == 'esp8266':
+            chip_class = esptool.targets.ESP8266ROM
+        else:
+            if not chip_def:
+                printlog("Unsupported chip: {}".format(FIRMWARE_CHIP))
+                return
+            chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
+
         if not chip_class:
             printlog("Unsupported chip: {}".format(FIRMWARE_CHIP))
             return
 
+        # Handle ESP8266 specially
+        if FIRMWARE_CHIP == 'esp8266':
+            esp8266_analyze_firmware(FIRMWARE_FULL_BIN, BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS)
+            return
+   
         flash = FIRMWARE_FULL_BIN
         fbootloader = io.BytesIO( flash[ chip_class.BOOTLOADER_FLASH_OFFSET:] ) 
         fbootloader_bytes: bytes = fbootloader.getvalue()
         BOOTLOADER_IMAGE = esptool.bin_image.LoadFirmwareImage(FIRMWARE_CHIP, fbootloader_bytes )
         image_size = BOOTLOADER_IMAGE.data_length + len(BOOTLOADER_IMAGE.stored_digest)
-
         BOOTLOADER_IMAGE_BIN = flash[chip_class.BOOTLOADER_FLASH_OFFSET:chip_class.BOOTLOADER_FLASH_OFFSET+image_size]
         printlog("Writing bootloader to: {}".format(FILE_BOOTLOADER))
         with open(FILE_BOOTLOADER,"wb") as f:
@@ -897,8 +1090,7 @@ def main():
         printlog(inst.args)
         printlog(inst)
     finally:
-        if FILE_LOG:
-            FILE_LOG.close()
+        log_close()
 
 
 
