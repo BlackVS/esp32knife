@@ -10,12 +10,14 @@
             "request": "launch",
             "program": "${workspaceFolder}/esp32knife.py",
             "console": "integratedTerminal",
+
+            //general
             //"args": ["flash_id"]
             //"args": ["--chip=esp32", "load_from_device", "--port=/dev/ttyUSB0", "--baud=2000000", "-e"]
             //"args": ["--chip=auto", "load_from_device", "--port=/dev/ttyUSB0", "--baud=2000000", "-e"]
             //"args": ["load_from_device", "--port=/dev/ttyUSB0", , "-e"]
             //"args": ["load_from_device", "--port=auto", "--baud=2000000", "-e"]
-            //"args": ["load_from_device", "--port=auto", "-e"] #esp8266
+            "args": ["load_from_device", "--port=auto", "-e"] #esp8266
             //"args": ["--chip=esp32", "-m=esp32badge2019", "load_from_file", "firmware_esp32os_full.bin"]
             //"args": ["elf/firmware.s", "elf/nn-badge191.s", "symbols_common_esp32.s"]
             //"args": ["memory/esp_rom/esp32/ld", "symbols_from_rom_esp32.s"]
@@ -23,19 +25,17 @@
 
             //badge2019
             // "args": ["--chip=esp32", "-m=nncbadge2019", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
-            //"args": ["--chip=esp32", "-m=nncbadge2019", "load_from_device", "--port=auto", "-e"]
-            "args": ["--chip=esp32", "-m=nncbadge2019", "load_from_file", "boards/nncbadge2019/firmware_nnc2019_full.bin"]
+            // "args": ["--chip=auto", "-m=nncbadge2019", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            // "args": ["--chip=esp32", "-m=nncbadge2019", "load_from_device", "--port=auto", "-e"]
+            // "args": ["--chip=esp32", "-m=nncbadge2019", "load_from_file", "boards/nncbadge2019/firmware_nnc2019_full.bin"]
             // "args": ["--chip=esp32", "-m=nncbadge2019", "load_from_file", "firmware.bin"]
-            //"args" : ["parsed/firmware_partitions.bin.0.nvs"]
+            // "args" : ["parsed/firmware_partitions.bin.0.nvs"]
             
             //badge2020
-            //"args": ["--chip=esp32", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
-            //"args": ["--chip=esp32", "-m=nncbadge2020_v2", "load_from_file", "boards/nncbadge2020_v2/firmware_nnc2020_v2_full.bin"]
-            
-            //badge2020 - CTF
-            //"args": ["--chip=esp32", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            // "args": ["--chip=esp32", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            // "args": ["--chip=auto", "-m=nncbadge2020", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
+            // "args": ["--chip=esp32", "-m=nncbadge2020_v2", "load_from_file", "boards/nncbadge2020_v2/firmware_nnc2020_v2_full.bin"]
             // "args": ["--chip=esp32", "-m=nncbadge2020", "load_from_file", "firmware.bin"]
-            // "args": ["--chip=esp32", "-m=nncbadge2020", "load_from_device", "--port=auto", "--baud=2000000", "-e"]
                         
             //single
             //"args": ["--chip=esp32", "load_from_file", "boards/nncbadge2020_ctf/firmware_nnc2020_ctf_full.bin"]

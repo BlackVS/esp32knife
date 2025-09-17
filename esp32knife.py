@@ -67,6 +67,12 @@ DETECTED_FLASH_SIZES_INT = {0x12: 256*1024,
                             0x18: 16*1024*1024
                         }
 
+def esp_flash_size(esp):
+    flash_id = esp.flash_id()
+    size_id = flash_id >> 16
+    return DETECTED_FLASH_SIZES_INT.get(size_id, None)
+
+
 DRAM0_DATA_START = None
 DRAM0_DATA_END   = None
 
@@ -89,24 +95,6 @@ def arg_auto_int(x):
 
 def print_mac(label, mac):
     printlog('%s: %s' % (label, ':'.join(map(lambda x: '%02x' % x, mac))))
-
-def read_mac(esp):
-    return esp.read_mac()
-
-
-class ESPFLASHSIZEARG:
-    flash_size = ""
-    def __init__(self, flash_size="detect"):
-        self.flash_size = flash_size
-
-
-def esp_flash_size(esp):
-    flash_id = esp.flash_id()
-    size_id = flash_id >> 16
-    return DETECTED_FLASH_SIZES_INT.get(size_id, None)
-    # a =  ESPFLASHSIZEARG('detect')
-    # esptool.detect_flash_size(esp, a)
-    # printlog(a)
 
 def get_seg_name(image, addr):
     return ",".join([seg_range[2] for seg_range in image.ROM_LOADER.MEMORY_MAP if seg_range[0] <= addr < seg_range[1]])
@@ -273,17 +261,27 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
     for p in ports:
         printlog("Try serial port %s" % p)
         try:
-            if chip == 'auto':
-                esp = esptool.ESPLoader.detect_chip(p, initial_baud, 'default_reset', False)
-            else:
-                # chip_class = esptool.CHIP_DEFS[chip]
-                chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(chip, None)
-                efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
-                chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
+            # if chip == 'auto':
+            #         # Get the ESP object from esptool
+            #         esp = esptool.detect_chip(p, initial_baud, 'default_reset', False)
+            #         # Prepare the ESP object; run stub and attach flash
+            #         esp = esptool.run_stub(esp)
+            #         esptool.attach_flash(esp)
+            # else:
+            #     # chip_class = esptool.CHIP_DEFS[chip]
+            #     chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(chip, None)
+            #     efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
+            #     chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
 
-                esp = chip_class(p, initial_baud, False)
-                esp.connect()
+            #     esp = chip_class(p, initial_baud, False)
+            #     esp.connect()
+            # break
+            esp =  espefuse.get_esp(chip=chip, port=p, baud=initial_baud, before='default_reset', skip_connect=False)
+            esp = esp.run_stub()
+            esptool.attach_flash(esp)
             break
+
+
         #except (FatalError, OSError) as err:
             #printlog("%s failed to connect: %s" % (p, err))
         except Exception as inst:
@@ -301,18 +299,19 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
     printlog("Features: %s" % ", ".join(esp.get_chip_features()))
     printlog("Crystal is %dMHz" % esp.get_crystal_freq())
 
-    mac=read_mac(esp)
+    mac=esp.read_mac()
     print_mac("MAC", mac)
 
-    espstub = esp.run_stub()        
+       
 
     if baud > initial_baud:
         try:
-            espstub.change_baud(baud)
+            esp.change_baud(baud)
         except NotImplementedInROMError:
             printlog("WARNING: ROM doesn't support changing baud rate. Keeping initial baud rate %d" % initial_baud)
 
-    flash_size = esp_flash_size(espstub)
+    # flash_size = esptool.detect_flash_size(esp)
+    flash_size = esp_flash_size(esp)
     printlog('Auto-detected Flash size:', flash_size)
 
     if read_efuses:
@@ -321,10 +320,6 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
             with open(FILE_EFUSES_TXT+".txt","wt") as f:
                 f.write(bin(efuses))
         else:
-            if not chip_def:
-                printlog("WARNING: Efuse definitions for %s not available" % esp.CHIP_NAME)
-                return None
-
             with espefuse.init_commands(esp=esp) as efuses_cmd:
                 with open(FILE_EFUSES_TXT+".cvs", "wt") as f:
                     log(f, "EFUSES:")
@@ -337,13 +332,13 @@ def read_firmware_from_device(chip, port, baud, read_efuses=True):
 
                 # s = efuses.efuses.summary()
                 # if s:
-                with open(FILE_EFUSES_TXT+".summary.txt", "wt") as f:
+                with open(FILE_EFUSES_TXT+".txt", "wt") as f:
                     efuses_cmd.summary(format="summary", file=f)
-                with open(FILE_EFUSES_TXT+".summary.json", "wt") as f:
+                with open(FILE_EFUSES_TXT+".json", "wt") as f:
                     efuses_cmd.summary(format="json", file=f)
 
 
-    flash = read_flash(espstub, 0, flash_size)
+    flash = read_flash(esp, 0, flash_size)
         
     FIRMWARE_ESP = esp
     return flash
@@ -796,6 +791,8 @@ def main():
         if args.operation=='load_from_device':
             FIRMWARE_FULL_BIN = read_firmware_from_device(args.chip, args.port, args.baud, args.read_efuses)  
             esp = FIRMWARE_ESP
+            FIRMWARE_CHIP = esp.CHIP_NAME.lower()
+
             printlog("Writing full firmware to: {}".format(FILE_FIRMWARE))
             with open(FILE_FIRMWARE,"wb") as f:
                 f.write(FIRMWARE_FULL_BIN)
@@ -804,16 +801,8 @@ def main():
             if args.chip=='auto':
                 printlog('Please specify chip!')
                 return
+            FIRMWARE_CHIP = args.chip.lower()
             
-            chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(args.chip, None)
-            efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
-            chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
-            if not chip_class:
-                printlog("Unsupported chip: {}".format(args.chip))
-                return
-
-            FIRMWARE_CHIP =  chip_class.CHIP_NAME
-
             printlog("Reading firmware from: {}".format(args.filename))
             with open(args.filename,"rb") as f:
                 FIRMWARE_FULL_BIN = f.read() 
@@ -825,12 +814,20 @@ def main():
             printlog("Failed to read firmware!")
             return
 
-        flash = FIRMWARE_FULL_BIN
-        chip  = FIRMWARE_CHIP
+        chip_def = espefuse.efuse_interface.SUPPORTED_CHIPS.get(FIRMWARE_CHIP, None)
+        if not chip_def:
+            printlog("Unsupported chip: {}".format(FIRMWARE_CHIP))
+            return
+        # efuse_class = chip_def.efuse_lib  # efuse for  get_efuses
+        chip_class = chip_def.chip_class  # for get_chip_description, get_chip_features, get_crystal_freq
+        if not chip_class:
+            printlog("Unsupported chip: {}".format(FIRMWARE_CHIP))
+            return
 
+        flash = FIRMWARE_FULL_BIN
         fbootloader = io.BytesIO( flash[ chip_class.BOOTLOADER_FLASH_OFFSET:] ) 
         fbootloader_bytes: bytes = fbootloader.getvalue()
-        BOOTLOADER_IMAGE = esptool.bin_image.LoadFirmwareImage(chip, fbootloader_bytes )
+        BOOTLOADER_IMAGE = esptool.bin_image.LoadFirmwareImage(FIRMWARE_CHIP, fbootloader_bytes )
         image_size = BOOTLOADER_IMAGE.data_length + len(BOOTLOADER_IMAGE.stored_digest)
 
         BOOTLOADER_IMAGE_BIN = flash[chip_class.BOOTLOADER_FLASH_OFFSET:chip_class.BOOTLOADER_FLASH_OFFSET+image_size]
@@ -839,9 +836,9 @@ def main():
             f.write(flash[0x1000:0x1000+image_size])
         printlog("Bootloader image info:")
         printlog("=================================================================================")
-        fparsed=flash_image_info(chip, BOOTLOADER_IMAGE_BIN, FILE_BOOTLOADER)
+        fparsed=flash_image_info(FIRMWARE_CHIP, BOOTLOADER_IMAGE_BIN, FILE_BOOTLOADER)
         if fparsed:
-            export_bin2elf( chip, BOOTLOADER_IMAGE_BIN, FILE_BOOTLOADER, None, None )
+            export_bin2elf( FIRMWARE_CHIP, BOOTLOADER_IMAGE_BIN, FILE_BOOTLOADER, None, None )
         printlog("=================================================================================\n")
 
 
@@ -890,9 +887,9 @@ def main():
                 continue
             printlog("Partition {}".format(p))
             printlog("-------------------------------------------------------------------")
-            fparsed=flash_image_info( chip, FIRMWARE_FULL_BIN[ p.offset: p.offset+p.size], FIRMWARE_PARTITIONS_FNAMES[i] )
+            fparsed=flash_image_info( FIRMWARE_CHIP, FIRMWARE_FULL_BIN[ p.offset: p.offset+p.size], FIRMWARE_PARTITIONS_FNAMES[i] )
             if fparsed:
-                export_bin2elf( chip, FIRMWARE_FULL_BIN[ p.offset: p.offset+p.size], FIRMWARE_PARTITIONS_FNAMES[i], BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS )
+                export_bin2elf( FIRMWARE_CHIP, FIRMWARE_FULL_BIN[ p.offset: p.offset+p.size], FIRMWARE_PARTITIONS_FNAMES[i], BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS )
         printlog("=================================================================================\n")
 
     except Exception as inst:
