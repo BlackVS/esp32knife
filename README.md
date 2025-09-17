@@ -1,11 +1,9 @@
 # esp32knife
 Tools for ESP32 firmware dissection
 
-Still alpha.
+V1: old legacy version, needs old esptool (3.0), supports just few boards
 
-V2: bound to newer esptool with more boards support
-
-install dependency by executing
+V2: will be bound to newer esptool with more boards support
 ```bash
 pip install -r requirements.txt
 ```
