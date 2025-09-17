@@ -3,6 +3,8 @@ Tools for ESP32 firmware dissection
 
 Still alpha.
 
+V2: bound to newer esptool with more boards support
+
 install dependency by executing
 ```bash
 pip install -r requirements.txt
