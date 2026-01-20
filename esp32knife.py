@@ -749,6 +749,8 @@ def export_bin2elf(chip, data, filename, board_ext_symbols, board_ext_segments):
             elf_segment = ".iram_loader.text"
         elif 'RTC_IRAM' in mem_segments:
             elf_segment = ".rtc.text"
+        elif 'PADDING' in mem_segments:
+            continue
         else:
             printlog("Can't map {} to anything!!!".format(mem_segments))
             return
