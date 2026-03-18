@@ -911,6 +911,9 @@ def main():
         parser.add_argument('--board', '-m',
                             help='Target board',
                             default=None)
+        parser.add_argument('--partition_table_offset', '-pt',
+                    help='Partition table offset (hex: 0x1234)',
+                    default=None)
 
         subparsers = parser.add_subparsers(
             dest='operation',
@@ -1019,6 +1022,10 @@ def main():
         if FIRMWARE_CHIP == 'esp8266':
             esp8266_analyze_firmware(FIRMWARE_FULL_BIN, BOARD_EXT_SYMBOLS, BOARD_EXT_SEGMENTS)
             return
+        
+        # Partition table offset
+        if args.partition_table_offset!=None:
+            FIRMWARE_PARTITIONS_TABLE_OFFSETS.append(int(args.partition_table_offset,16))
    
         flash = FIRMWARE_FULL_BIN
         fbootloader = io.BytesIO( flash[ chip_class.BOOTLOADER_FLASH_OFFSET:] ) 
