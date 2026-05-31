@@ -701,6 +701,7 @@ def export_bin2elf(chip, data, filename, board_ext_symbols, board_ext_segments):
             '.irom1.text'       : (0x00, 'WAX',  0, 0, 4), 
 
             '.dram0.data'   : (0x00, 'WA' ,  0, 0, 16),
+            '.rtc.data'     : (0x00, 'WA' ,  0, 0, 4),
             '.dram0.bss'    : (0x00, 'WA' ,  0, 0, 8),
 
             '.flash.rodata' : (0x00, 'WA' ,  0, 0, 16),
@@ -751,6 +752,8 @@ def export_bin2elf(chip, data, filename, board_ext_symbols, board_ext_segments):
             elf_segment = ".rtc.text"
         elif 'PADDING' in mem_segments:
             continue
+        elif mem_segments == {"RTC_DATA"}:
+            elf_segment = ".rtc.data"
         else:
             printlog("Can't map {} to anything!!!".format(mem_segments))
             return
